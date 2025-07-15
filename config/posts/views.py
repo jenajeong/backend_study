@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from rest_framework import generics, permissions
 from .models import Post
+from .permissions import IsOwnerOrReadOnly
 from .serializers import PostSerializer
 # Create your views here.
 
@@ -20,7 +21,7 @@ class PostCreateView(generics.CreateAPIView):
 class PostRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Post.objects.all()
     selializer_class = PostSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly] #글 상세 조회, 수정, 삭제 - 로그인 시 가능
+    permission_classes = [IsOwnerOrReadOnly] #글 상세 조회, 수정, 삭제 - 로그인 시 가능
     
     
     
