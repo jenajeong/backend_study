@@ -5,6 +5,7 @@ from .models import Post, Like, Comment
 from .permissions import IsOwnerOrReadOnly
 from .serializers import PostSerializer, CommentSerializer, ReplySerializer
 from django.http import JsonResponse
+from rest_framework.exceptions import PermissionDenied
 # Create your views here.
 
 class PostListView(generics.ListAPIView):
@@ -57,22 +58,39 @@ class CommentListCreateView(generics.ListCreateAPIView):
         serializer.save(author=self.request.user, post=post)
 
 class CommentUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Comment.objects.all()
     serializer_class = CommentSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        return Comment.objects.filter(post__id=self.kwargs['community_id'], is_deleted=False)
+
     def perform_destroy(self, instance):
+        # 소프트 삭제 처리
+        if self.request.user != instance.author:
+            raise PermissionDenied("삭제 권한이 없습니다.")
         instance.is_deleted = True
         instance.save()
 
+    def perform_update(self, serializer):
+        if self.request.user != serializer.instance.author:
+            raise PermissionDenied("수정 권한이 없습니다.")
+        serializer.save()
+
 class ReplyCreateView(generics.CreateAPIView):
-    serializer_class = ReplySerializer
+    serializer_class = CommentSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
-        parent_id = self.kwargs['comment_id']
-        parent = get_object_or_404(Comment, id=parent_id)
-        serializer.save(author=self.request.user, post=parent.post, parent=parent)
+        parent_comment = Comment.objects.get(pk=self.kwargs['comment_id'])
+        post = parent_comment.post
+        mention = f"@{parent_comment.author.username} "  # 자동 멘션
+        content_with_mention = mention + self.request.data.get("content", "")
+        serializer.save(
+            author=self.request.user,
+            post=post,
+            parent=parent_comment,
+            content=content_with_mention
+        )
         
     
     
