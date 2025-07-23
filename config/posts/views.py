@@ -1,9 +1,9 @@
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
 from rest_framework import generics, permissions
-from .models import Post, Like
+from .models import Post, Like, Comment
 from .permissions import IsOwnerOrReadOnly
-from .serializers import PostSerializer
+from .serializers import PostSerializer, CommentSerializer, ReplySerializer
 from django.http import JsonResponse
 # Create your views here.
 
@@ -42,6 +42,37 @@ def toggle_like(request, post_id):
         like_count = post.likes.filter(is_active=True).count() #해당 게시글의 좋아요수 집계
 
         return JsonResponse({'liked': is_liked, 'like_count': like_count})
-    
+
+class CommentListCreateView(generics.ListCreateAPIView):
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        post_id = self.kwargs['community_id']
+        return Comment.objects.filter(post_id=post_id, parent__isnull=True, is_deleted=False)
+
+    def perform_create(self, serializer):
+        post_id = self.kwargs['community_id']
+        post = get_object_or_404(Post, pk=post_id)
+        serializer.save(author=self.request.user, post=post)
+
+class CommentUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_destroy(self, instance):
+        instance.is_deleted = True
+        instance.save()
+
+class ReplyCreateView(generics.CreateAPIView):
+    serializer_class = ReplySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        parent_id = self.kwargs['comment_id']
+        parent = get_object_or_404(Comment, id=parent_id)
+        serializer.save(author=self.request.user, post=parent.post, parent=parent)
+        
     
     
